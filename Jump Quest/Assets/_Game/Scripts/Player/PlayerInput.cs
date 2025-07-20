@@ -2,54 +2,78 @@ using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+[RequireComponent(typeof(Rigidbody))]
 public class PlayerInput : MonoBehaviour
 {
-    public Rigidbody _rb;
-    public float moveSpeed = 5f;
-    public float jumpForce = 50f;
-    private Vector2 _moveDirection;
+    [Header("Movement Settings")]
+    [SerializeField] private float moveSpeed = 5f;
+    [SerializeField] private float jumpHeight = 2f;
+    [SerializeField] private float jumpDuration = 0.3f; // Время, в течение которого можно прыгнуть от стены
+    [SerializeField] private LayerMask groundLayer;
+    [SerializeField] private float groundCheckRadius = 0.2f;
+    [SerializeField] private Transform groundCheck;
 
-    public InputActionReference move;
-    public InputActionReference jump;
-    
+    [Header("Input Actions")]
+    [SerializeField] private InputActionReference moveAction;
+    [SerializeField] private InputActionReference jumpAction;
+
+    private Rigidbody _rb;
+    private Vector2 _moveInput;
+    private float _jumpVelocity;
     private bool _isGrounded;
 
-    private void Start()
+    private void Awake()
     {
-        _isGrounded = Physics.Raycast(transform.position, Vector3.down, 1f);
-    }
+        _rb = GetComponent<Rigidbody>();
 
-    private void Update()
-    {
-        _moveDirection = move.action.ReadValue<Vector2>();
-    }
-
-    private void FixedUpdate()
-    {
-        _rb.linearVelocity = new Vector3(_moveDirection.x * moveSpeed * Time.deltaTime,
-            _moveDirection.y * moveSpeed * Time.deltaTime, 0f);
+        float gravity = Physics.gravity.y;
+        _jumpVelocity = Mathf.Abs(gravity) * jumpDuration + Mathf.Sqrt(2 * jumpHeight * Mathf.Abs(gravity));
     }
 
     private void OnEnable()
     {
-        jump.action.started += Jump;
-    }
-    
-    private void Jump(InputAction.CallbackContext obj)
-    {
-        if (Physics.Raycast(transform.position, Vector3.down, 1f))
-        {
-            Physics.gravity = Vector3.Lerp(Physics.gravity, new Vector3(0, -120f, 0), Time.deltaTime);
-            _rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
-        }
-        else
-        {
-            Physics.gravity = new Vector3(0, -9.81f, 0);
-        }
+        moveAction.action.Enable();
+        jumpAction.action.Enable();
     }
 
     private void OnDisable()
     {
-        jump.action.started -= Jump;
+        moveAction.action.Disable();
+        jumpAction.action.Disable();
+    }
+
+    private void Update()
+    {
+        _moveInput = moveAction.action.ReadValue<Vector2>();
+
+        if (jumpAction.action.WasPressedThisFrame())
+        {
+            if (_isGrounded)
+            {
+                Jump(_jumpVelocity);
+            }
+        }
+    }
+
+    private void FixedUpdate()
+    {
+        Move();
+        CheckGround();
+    }
+
+    private void CheckGround()
+    {
+        _isGrounded = Physics.OverlapSphere(groundCheck.position, groundCheckRadius, groundLayer).Length > 0;
+    }
+
+    private void Move()
+    {
+        Vector3 movement = new Vector3(_moveInput.x, 0, 0) * moveSpeed;
+        _rb.linearVelocity = new Vector3(movement.x, _rb.linearVelocity.y, 0);
+    }
+
+    private void Jump(float force)
+    {
+        _rb.linearVelocity = new Vector3(_rb.linearVelocity.x, force, 0);
     }
 }
